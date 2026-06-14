@@ -1,67 +1,91 @@
 package ui
 
 import (
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	// Status/Footer styles
-	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7"))              // Pink
-	helpStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086")).MarginTop(1) // Overlay0
-	inputStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8")).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#cba6f7")).Padding(0, 1).Width(60)
+// Styles holds every lipgloss.Style the UI renders with, built from a Theme.
+// Building once (in New) keeps View() allocation-free and theme-driven.
+type Styles struct {
+	theme Theme
 
-	// Details View Styles
-	detailsStyle = lipgloss.NewStyle().
+	status       lipgloss.Style
+	help         lipgloss.Style
+	input        lipgloss.Style
+	details      lipgloss.Style
+	detailsTitle lipgloss.Style
+	logo         lipgloss.Style
+	panelSection lipgloss.Style
+	panelValue   lipgloss.Style
+	cpuBar       lipgloss.Style
+	memBar       lipgloss.Style
+	emptyBar     lipgloss.Style
+}
+
+// newStyles builds the full style set from the given theme.
+func newStyles(t Theme) Styles {
+	return Styles{
+		theme:  t,
+		status: lipgloss.NewStyle().Foreground(t.Status),
+		help:   lipgloss.NewStyle().Foreground(t.Help).MarginTop(1),
+		input: lipgloss.NewStyle().
+			Foreground(t.InputText).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#cba6f7")).
+			BorderForeground(t.Accent).
+			Padding(0, 1).
+			Width(60),
+		details: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(t.Accent).
 			Padding(1, 2).
-			Width(60)
-	detailsTitleStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#cba6f7")).
-				Bold(true).
-				MarginBottom(1)
-
-	// Logo Style
-	logoStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#cba6f7")). // Mauve
+			Width(60),
+		detailsTitle: lipgloss.NewStyle().
+			Foreground(t.Accent).
 			Bold(true).
-			MarginBottom(1)
-)
+			MarginBottom(1),
+		logo: lipgloss.NewStyle().
+			Foreground(t.Accent).
+			Bold(true).
+			MarginBottom(1),
+		panelSection: lipgloss.NewStyle().Foreground(t.Accent).Bold(true),
+		panelValue:   lipgloss.NewStyle().Foreground(t.TextPrimary),
+		cpuBar:       lipgloss.NewStyle().Foreground(t.CPUBar),
+		memBar:       lipgloss.NewStyle().Foreground(t.MemBar),
+		emptyBar:     lipgloss.NewStyle().Foreground(t.EmptyBar),
+	}
+}
 
-// makeBaseStyle returns a new lipgloss.Style configured with a normal border
-// and the given width and height. It is a pure function — no package-level
-// state is mutated when dimensions change.
-func makeBaseStyle(w, h int) lipgloss.Style {
+// base returns the bordered container style for the table region.
+func (s Styles) base(w, h int) lipgloss.Style {
 	return lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#6c7086")). // Overlay0
+		BorderForeground(s.theme.Border).
 		Width(w - 2).
 		Height(h)
 }
 
-// makePanelStyle returns the style for the side detail panel.
-func makePanelStyle(w, h int) lipgloss.Style {
+// panel returns the bordered container style for the side detail panel.
+func (s Styles) panel(w, h int) lipgloss.Style {
 	return lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#cba6f7")). // Mauve
+		BorderForeground(s.theme.Accent).
 		Padding(0, 1).
 		Width(w - 2).
 		Height(h)
 }
 
-// panelSectionStyle renders a section header inside the panel.
-var panelSectionStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("#cba6f7")). // Mauve
-	Bold(true)
-
-// panelValueStyle renders values inside the panel.
-var panelValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#cdd6f4")) // Text
-
-// cpuBarStyle for the CPU fill.
-var cpuBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#f38ba8")) // Red
-
-// memBarStyle for the MEM fill.
-var memBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#fab387")) // Peach
-
-// emptyBarStyle for the empty portion of bars.
-var emptyBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#45475a")) // Surface1
+// tableStyles builds the bubbles/table style set from the theme.
+func (s Styles) tableStyles() table.Styles {
+	ts := table.DefaultStyles()
+	ts.Header = ts.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(s.theme.Border).
+		BorderBottom(true).
+		Bold(true)
+	ts.Selected = ts.Selected.
+		Foreground(s.theme.SelectedFg).
+		Background(s.theme.SelectedBg).
+		Bold(false)
+	return ts
+}

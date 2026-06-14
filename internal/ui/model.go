@@ -31,6 +31,7 @@ type panelMsg struct {
 
 type model struct {
 	scanner          ports.Scanner
+	styles           Styles
 	table            table.Model
 	textInput        textinput.Model
 	labelInput       textinput.Model
@@ -69,22 +70,14 @@ func New(scanner ports.Scanner, cfg config.Config) model {
 		{Title: "Process", Width: 20},
 	}
 
+	styles := newStyles(themeByName(cfg.General.Theme))
+
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithFocused(true),
 		table.WithHeight(10),
 	)
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#6c7086")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("#cdd6f4")).
-		Background(lipgloss.Color("#313244")).
-		Bold(false)
-	t.SetStyles(s)
+	t.SetStyles(styles.tableStyles())
 
 	search := textinput.New()
 	search.Placeholder = "Search ports, processes, pids..."
@@ -114,6 +107,7 @@ func New(scanner ports.Scanner, cfg config.Config) model {
 
 	m := model{
 		scanner:         scanner,
+		styles:          styles,
 		table:           t,
 		textInput:       search,
 		labelInput:      li,
@@ -541,7 +535,7 @@ func (m model) renderSidePanel(e ports.PortEntry, innerWidth int) string {
 	var b strings.Builder
 	sep := strings.Repeat("─", innerWidth)
 
-	b.WriteString(panelSectionStyle.Render("── CONEXIÓN ──") + "\n")
+	b.WriteString(m.styles.panelSection.Render("── CONEXIÓN ──") + "\n")
 	b.WriteString(fmt.Sprintf("Puerto:  %s/%s\n", e.Port, e.Protocol))
 	b.WriteString(fmt.Sprintf("Estado:  %s\n", e.State))
 	addrIcon := "🌐"
@@ -549,17 +543,17 @@ func (m model) renderSidePanel(e ports.PortEntry, innerWidth int) string {
 		addrIcon = "🔒"
 	}
 	b.WriteString(fmt.Sprintf("Addr:    %s %s\n", addrIcon, e.Address))
-	b.WriteString(panelValueStyle.Render(sep) + "\n")
+	b.WriteString(m.styles.panelValue.Render(sep) + "\n")
 
-	b.WriteString(panelSectionStyle.Render("── PROCESO ──") + "\n")
+	b.WriteString(m.styles.panelSection.Render("── PROCESO ──") + "\n")
 	b.WriteString(fmt.Sprintf("PID:     %s\n", e.PID))
 	b.WriteString(fmt.Sprintf("Nombre:  %s\n", e.Process))
 	if lbl := m.labelStore.Get(e.Port); lbl != "" {
 		b.WriteString(fmt.Sprintf("Etiqueta: %s\n", lbl))
 	}
-	b.WriteString(panelValueStyle.Render(sep) + "\n")
+	b.WriteString(m.styles.panelValue.Render(sep) + "\n")
 
-	b.WriteString(panelSectionStyle.Render("── RED ──") + "\n")
+	b.WriteString(m.styles.panelSection.Render("── RED ──") + "\n")
 	exposure := "⚠ EXPUESTO"
 	if strings.HasPrefix(e.Address, "127.") || e.Address == "::1" {
 		exposure = "✓ LOCAL"
@@ -570,9 +564,9 @@ func (m model) renderSidePanel(e ports.PortEntry, innerWidth int) string {
 		conn = "0"
 	}
 	b.WriteString(fmt.Sprintf("Conn activas: %s\n", conn))
-	b.WriteString(panelValueStyle.Render(sep) + "\n")
+	b.WriteString(m.styles.panelValue.Render(sep) + "\n")
 
-	b.WriteString(panelSectionStyle.Render("── RECURSOS ──") + "\n")
+	b.WriteString(m.styles.panelSection.Render("── RECURSOS ──") + "\n")
 	if e.PID == "-" {
 		b.WriteString("CPU  –\nMEM  –\n")
 	} else if m.panelLoading && m.panelPID != e.PID {
@@ -582,23 +576,23 @@ func (m model) renderSidePanel(e ports.PortEntry, innerWidth int) string {
 		if barW < 4 {
 			barW = 4
 		}
-		cpuBar := renderBar(m.panelResource.CPUPercent, 100, barW, cpuBarStyle, emptyBarStyle)
-		memBar := renderBar(m.panelResource.MemMB, 2048, barW, memBarStyle, emptyBarStyle)
+		cpuBar := renderBar(m.panelResource.CPUPercent, 100, barW, m.styles.cpuBar, m.styles.emptyBar)
+		memBar := renderBar(m.panelResource.MemMB, 2048, barW, m.styles.memBar, m.styles.emptyBar)
 		b.WriteString(fmt.Sprintf("CPU  %s %.1f%%\n", cpuBar, m.panelResource.CPUPercent))
 		b.WriteString(fmt.Sprintf("MEM  %s %.0fMB\n", memBar, m.panelResource.MemMB))
 	} else {
 		b.WriteString("CPU  –\nMEM  –\n")
 	}
-	b.WriteString(panelValueStyle.Render(sep) + "\n")
+	b.WriteString(m.styles.panelValue.Render(sep) + "\n")
 
 	if m.panelPID == e.PID && m.panelDetails != "" {
-		b.WriteString(panelSectionStyle.Render("── DETALLES ──") + "\n")
-		b.WriteString(panelValueStyle.Render(m.panelDetails) + "\n")
-		b.WriteString(panelValueStyle.Render(sep) + "\n")
+		b.WriteString(m.styles.panelSection.Render("── DETALLES ──") + "\n")
+		b.WriteString(m.styles.panelValue.Render(m.panelDetails) + "\n")
+		b.WriteString(m.styles.panelValue.Render(sep) + "\n")
 	}
 
-	b.WriteString(panelSectionStyle.Render("── ACCIONES ──") + "\n")
-	b.WriteString(helpStyle.Render("[k]Matar [K]Forzar [o]Abrir [y]Copiar [l]Etiqueta"))
+	b.WriteString(m.styles.panelSection.Render("── ACCIONES ──") + "\n")
+	b.WriteString(m.styles.help.Render("[k]Matar [K]Forzar [o]Abrir [y]Copiar [l]Etiqueta"))
 
 	return b.String()
 }
@@ -608,33 +602,33 @@ func (m model) View() string {
 		return fmt.Sprintf("Error: %v\nPress 'q' to quit", m.err)
 	}
 
-	logo := logoStyle.Render("⚡ LazyPorts")
+	logo := m.styles.logo.Render("⚡ LazyPorts")
 	availableHeight := m.height - 7
 
 	// ── Force kill confirmation ──────────────────────────────────────────────
 	if m.pendingForceKill != "" {
-		prompt := detailsStyle.Render(
-			detailsTitleStyle.Render("⚠ Force Kill") + "\n" +
+		prompt := m.styles.details.Render(
+			m.styles.detailsTitle.Render("⚠ Force Kill") + "\n" +
 				fmt.Sprintf("Send SIGKILL to PID %s?\n\n", m.pendingForceKill) +
-				helpStyle.Render("K / Enter: confirm  •  Esc: cancel"),
+				m.styles.help.Render("K / Enter: confirm  •  Esc: cancel"),
 		)
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, prompt)
 	}
 
 	// ── Details modal ────────────────────────────────────────────────────────
 	if m.showDetails {
-		content := detailsTitleStyle.Render("Connection Details") + "\n" + m.detailsContent
-		content += "\n\n" + helpStyle.Render("Press Esc/Enter to close")
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, detailsStyle.Render(content))
+		content := m.styles.detailsTitle.Render("Connection Details") + "\n" + m.detailsContent
+		content += "\n\n" + m.styles.help.Render("Press Esc/Enter to close")
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.styles.details.Render(content))
 	}
 
 	// ── Label input ──────────────────────────────────────────────────────────
 	if m.isLabeling {
 		if e, ok := m.selectedEntry(); ok {
-			prompt := detailsStyle.Render(
-				detailsTitleStyle.Render(fmt.Sprintf("Label port %s", e.Port)) + "\n" +
-					inputStyle.Render(m.labelInput.View()) + "\n" +
-					helpStyle.Render("Enter: save  •  Esc: cancel"),
+			prompt := m.styles.details.Render(
+				m.styles.detailsTitle.Render(fmt.Sprintf("Label port %s", e.Port)) + "\n" +
+					m.styles.input.Render(m.labelInput.View()) + "\n" +
+					m.styles.help.Render("Enter: save  •  Esc: cancel"),
 			)
 			return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, prompt)
 		}
@@ -643,17 +637,17 @@ func (m model) View() string {
 	// ── Search filter ────────────────────────────────────────────────────────
 	if m.isFiltering {
 		tw := m.tableWidth()
-		tableView := makeBaseStyle(tw, availableHeight).Render(m.table.View())
+		tableView := m.styles.base(tw, availableHeight).Render(m.table.View())
 		return fmt.Sprintf("%s\n%s\n%s\n%s",
 			logo, tableView,
-			inputStyle.Render(m.textInput.View()),
-			helpStyle.Render("Type to search  •  Esc/Enter: done"),
+			m.styles.input.Render(m.textInput.View()),
+			m.styles.help.Render("Type to search  •  Esc/Enter: done"),
 		)
 	}
 
 	// ── Normal / split view ──────────────────────────────────────────────────
 	tw := m.tableWidth()
-	tableView := makeBaseStyle(tw, availableHeight).Render(m.table.View())
+	tableView := m.styles.base(tw, availableHeight).Render(m.table.View())
 
 	var mainContent string
 	if m.showSidePanel && m.width >= 80 {
@@ -664,7 +658,7 @@ func (m model) View() string {
 		}
 		if e, ok := m.selectedEntry(); ok {
 			panelContent := m.renderSidePanel(e, innerW)
-			panelView := makePanelStyle(pw, availableHeight).Render(panelContent)
+			panelView := m.styles.panel(pw, availableHeight).Render(panelContent)
 			mainContent = lipgloss.JoinHorizontal(lipgloss.Top, tableView, panelView)
 		} else {
 			mainContent = tableView
@@ -683,7 +677,7 @@ func (m model) View() string {
 	}
 	controls := fmt.Sprintf("↑/↓ Nav • / Filter • Enter Details • k Kill • K Force • y Copy • o Open • l Label • R Auto%s • %s • s Sort • q Quit", refresh, panelHint)
 	if m.status != "" {
-		controls = statusStyle.Render(m.status) + " • " + controls
+		controls = m.styles.status.Render(m.status) + " • " + controls
 	}
-	return fmt.Sprintf("%s\n%s\n%s", logo, mainContent, helpStyle.Render(controls))
+	return fmt.Sprintf("%s\n%s\n%s", logo, mainContent, m.styles.help.Render(controls))
 }

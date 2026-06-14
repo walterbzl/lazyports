@@ -1,0 +1,20 @@
+# LazyPorts configuration
+# Copy this file to ~/.config/lazyports/config.toml to apply.
+
+[general]
+# Auto-refresh interval in seconds. 0 = manual refresh only (press "r").
+refresh_interval = 3
+# Color theme: "catppuccin" (default) or "cherry" (Cherry Red 🍒).
+theme = "cherry"
+
+[filters]
+# Initial sort column: "port" | "process" | "pid".
+default_sort = "port"
+show_system_ports = true
+# Restrict to a port range, e.g. "3000-9000". Empty = no restriction.
+focus_range = ""
+
+[keybindings]
+kill = "k"
+force_kill = "K"
+quit = "q"
