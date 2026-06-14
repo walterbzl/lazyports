@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/v9mirza/lazyports/internal/config"
 	"github.com/v9mirza/lazyports/internal/labels"
 	"github.com/v9mirza/lazyports/internal/ports"
 )
@@ -47,6 +48,7 @@ type model struct {
 	sortMode         ports.SortMode
 	pendingForceKill string
 	autoRefresh      bool
+	refreshInterval  time.Duration // from config; 0 = manual only
 	// side panel
 	showSidePanel bool
 	panelPID      string
@@ -55,7 +57,7 @@ type model struct {
 	panelLoading  bool
 }
 
-func New(scanner ports.Scanner) model {
+func New(scanner ports.Scanner, cfg config.Config) model {
 	columns := []table.Column{
 		{Title: "Port", Width: 8},
 		{Title: "Proto", Width: 6},
@@ -96,13 +98,33 @@ func New(scanner ports.Scanner) model {
 
 	ls, _ := labels.Load()
 
-	return model{
-		scanner:    scanner,
-		table:      t,
-		textInput:  search,
-		labelInput: li,
-		labelStore: ls,
+	// Apply config values
+	sortMode := ports.SortByPort
+	switch cfg.Filters.DefaultSort {
+	case "process":
+		sortMode = ports.SortByProcess
+	case "pid":
+		sortMode = ports.SortByPID
 	}
+
+	var refreshInterval time.Duration
+	if cfg.General.RefreshInterval > 0 {
+		refreshInterval = time.Duration(cfg.General.RefreshInterval) * time.Second
+	}
+
+	m := model{
+		scanner:         scanner,
+		table:           t,
+		textInput:       search,
+		labelInput:      li,
+		labelStore:      ls,
+		sortMode:        sortMode,
+		refreshInterval: refreshInterval,
+	}
+	if refreshInterval > 0 {
+		m.autoRefresh = true
+	}
+	return m
 }
 
 func loadPortsCmd(s ports.Scanner) tea.Cmd {
@@ -115,8 +137,12 @@ func loadPortsCmd(s ports.Scanner) tea.Cmd {
 	}
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(autoRefreshInterval, func(t time.Time) tea.Msg {
+func (m model) tickCmd() tea.Cmd {
+	interval := m.refreshInterval
+	if interval <= 0 {
+		interval = autoRefreshInterval
+	}
+	return tea.Tick(interval, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -131,7 +157,7 @@ func loadPanelCmd(s ports.Scanner, e ports.PortEntry) tea.Cmd {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(loadPortsCmd(m.scanner), textinput.Blink, tickCmd())
+	return tea.Batch(loadPortsCmd(m.scanner), textinput.Blink, m.tickCmd())
 }
 
 func (m model) selectedEntry() (ports.PortEntry, bool) {
@@ -350,9 +376,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		if m.autoRefresh {
-			return m, tea.Batch(loadPortsCmd(m.scanner), tickCmd())
+			return m, tea.Batch(loadPortsCmd(m.scanner), m.tickCmd())
 		}
-		return m, tickCmd()
+		return m, m.tickCmd()
 
 	case error:
 		m.err = msg
