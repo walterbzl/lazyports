@@ -4,7 +4,7 @@
 [general]
 # Auto-refresh interval in seconds. 0 = manual refresh only (press "r").
 refresh_interval = 3
-# Color theme: "catppuccin" (default) or "cherry" (Cherry Red 🍒).
+# Color theme: "catppuccin" (default) | "cherry" 🍒 | "tokyo-night" | "gruvbox".
 theme = "cherry"
 
 [filters]

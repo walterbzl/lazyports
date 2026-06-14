@@ -52,11 +52,49 @@ func cherryTheme() Theme {
 	}
 }
 
+// tokyoNightTheme is the Tokyo Night (Night variant) palette.
+func tokyoNightTheme() Theme {
+	return Theme{
+		Border:      lipgloss.Color("#3b4261"),
+		Accent:      lipgloss.Color("#7aa2f7"),
+		Status:      lipgloss.Color("#bb9af7"),
+		Help:        lipgloss.Color("#565f89"),
+		InputText:   lipgloss.Color("#a9b1d6"),
+		TextPrimary: lipgloss.Color("#c0caf5"),
+		SelectedFg:  lipgloss.Color("#c0caf5"),
+		SelectedBg:  lipgloss.Color("#283457"),
+		CPUBar:      lipgloss.Color("#f7768e"),
+		MemBar:      lipgloss.Color("#e0af68"),
+		EmptyBar:    lipgloss.Color("#292e42"),
+	}
+}
+
+// gruvboxTheme is the Gruvbox Dark palette.
+func gruvboxTheme() Theme {
+	return Theme{
+		Border:      lipgloss.Color("#504945"),
+		Accent:      lipgloss.Color("#fabd2f"),
+		Status:      lipgloss.Color("#d3869b"),
+		Help:        lipgloss.Color("#928374"),
+		InputText:   lipgloss.Color("#d5c4a1"),
+		TextPrimary: lipgloss.Color("#ebdbb2"),
+		SelectedFg:  lipgloss.Color("#fbf1c7"),
+		SelectedBg:  lipgloss.Color("#3c3836"),
+		CPUBar:      lipgloss.Color("#fb4934"),
+		MemBar:      lipgloss.Color("#fe8019"),
+		EmptyBar:    lipgloss.Color("#3c3836"),
+	}
+}
+
 // themeByName resolves a config theme name to a Theme, defaulting to Catppuccin.
 func themeByName(name string) Theme {
 	switch name {
 	case "cherry":
 		return cherryTheme()
+	case "tokyo-night":
+		return tokyoNightTheme()
+	case "gruvbox":
+		return gruvboxTheme()
 	default:
 		return catppuccinTheme()
 	}
