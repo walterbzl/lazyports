@@ -1,43 +1,84 @@
-# Architecture & File Structure
+# LazyPorts — Architecture
 
-This document outlines the purpose of each file in the `lazyports` codebase.
+## Package Layout
 
-## Core Application
+```
+lazyports/
+├── cmd/
+│   └── lazyports/
+│       └── main.go          Entry point — wires Scanner + UI, launches tea.Program
+├── internal/
+│   ├── ports/
+│   │   ├── entry.go         PortEntry struct, SortMode type + constants
+│   │   ├── scanner.go       Scanner interface + SSScanner (Linux ss/ps impl)
+│   │   └── scanner_test.go  Unit tests for ss output parser (no exec calls)
+│   └── ui/
+│       ├── model.go         Bubble Tea model — Init/Update/View + helpers
+│       └── styles.go        Lipgloss style declarations + makeBaseStyle factory
+├── go.mod / go.sum
+└── install.sh
+```
 
-### [main.go](./main.go)
-**Role:** Entry Point
--   Sets up the initial table columns.
--   Initializes the `Bubble Tea` program.
--   Starts the application loop.
+## Dependency Direction
 
-### [model.go](./model.go)
-**Role:** State & Logic (The Brain)
--   **Structs**: Defines `PortEntry` (data) and `model` (app state).
--   **Update()**: Handles user input (Keypresses: `k`, `r`, `/`, `Enter`).
--   **View()**: Renders the UI (Table, Filter Input, or Details Popup) based on state.
+```
+cmd/lazyports/main.go
+  └─► internal/ui     (model, styles)
+        └─► internal/ports  (Scanner interface, PortEntry, SortMode)
+              └─► stdlib (os, os/exec, strconv, strings, fmt)
+```
 
-### [utils.go](./utils.go)
-**Role:** System Operations (The Engine)
--   **`getPorts()`**: Executes `ss -tulnp`, parses output, and handles sudo/root detection logic.
--   **`killProcess()`**: Sends termination signals to processes.
--   **`getProcessDetails()`**: Fetches detailed process info using `ps`.
+One-way only. `internal/ports` has zero project imports.
 
-### [styles.go](./styles.go)
-**Role:** UI Design
--   Contains all `lipgloss` definitions.
--   Defines colors, borders, margins, and text styles.
+## Data Flow
 
-## Build & Install
+```
+[Linux: ss -tulnp]
+       │
+       ▼
+ SSScanner.GetPorts()        ← exec.Command + parseSSOutput()
+       │
+       ▼  tea.Msg ([]ports.PortEntry)
+ model.Update() [internal/ui]
+  sortEntries() → filterEntries() → updateTable()
+       │
+       ▼
+ model.View()  → rendered string
+```
 
-### [install.sh](./install.sh)
-**Role:** Installation Script
--   Checks for Go installation.
--   Runs `go install`.
--   Moves binary to `/usr/local/bin` for global availability.
+## Key Types
 
-### [go.mod](./go.mod)
-**Role:** Dependency Management
--   Tracks external libraries:
-    -   `bubbletea`: TUI Framework
-    -   `lipgloss`: Styling
-    -   `bubbles`: UI Components (Table, Text Input)
+```go
+// internal/ports/entry.go
+type PortEntry struct { Port, Protocol, PID, Process, State, Address string }
+type SortMode int  // SortByPort | SortByProcess | SortByPID
+
+// internal/ports/scanner.go
+type Scanner interface {
+    GetPorts() ([]PortEntry, error)
+    KillProcess(pid string) error
+    GetProcessDetails(pid string) (string, error)
+}
+
+// internal/ui/model.go
+type model struct {
+    scanner         ports.Scanner
+    table           table.Model
+    textInput       textinput.Model
+    entries         []ports.PortEntry
+    filteredEntries []ports.PortEntry
+    width, height   int
+    // ...
+}
+```
+
+## Design Principles
+
+- **Scanner interface**: all OS syscalls (`exec.Command`, `os.FindProcess`, `os.Geteuid`) live in `internal/ports`. The UI never calls the OS directly.
+- **makeBaseStyle(w, h)**: pure factory — no mutable package-level style vars.
+- **loadPortsCmd(s Scanner)**: closure factory injected at construction time, not a global.
+- **Testability**: `parseSSOutput(out string, isRoot bool)` is a pure function — unit-tested without forking any process.
+
+## Platform
+
+v0.1.0 is **Linux-only** (`ss -tulnp`, `ps`). macOS support (`lsof`) is on the roadmap.
