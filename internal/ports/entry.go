@@ -19,3 +19,9 @@ type PortEntry struct {
 	Address     string
 	Connections string // active ESTABLISHED connections for this port ("–" if unavailable)
 }
+
+// ResourceInfo holds live CPU and memory metrics for a process.
+type ResourceInfo struct {
+	CPUPercent float64
+	MemMB      float64
+}

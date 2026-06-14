@@ -38,3 +38,30 @@ func makeBaseStyle(w, h int) lipgloss.Style {
 		Width(w - 2).
 		Height(h)
 }
+
+// makePanelStyle returns the style for the side detail panel.
+func makePanelStyle(w, h int) lipgloss.Style {
+	return lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#cba6f7")). // Mauve
+		Padding(0, 1).
+		Width(w - 2).
+		Height(h)
+}
+
+// panelSectionStyle renders a section header inside the panel.
+var panelSectionStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#cba6f7")). // Mauve
+	Bold(true)
+
+// panelValueStyle renders values inside the panel.
+var panelValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#cdd6f4")) // Text
+
+// cpuBarStyle for the CPU fill.
+var cpuBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#f38ba8")) // Red
+
+// memBarStyle for the MEM fill.
+var memBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#fab387")) // Peach
+
+// emptyBarStyle for the empty portion of bars.
+var emptyBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#45475a")) // Surface1

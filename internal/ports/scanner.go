@@ -15,6 +15,7 @@ type Scanner interface {
 	KillProcess(pid string) error      // SIGTERM — graceful shutdown
 	ForceKillProcess(pid string) error // SIGKILL — immediate termination
 	GetProcessDetails(pid string) (string, error)
+	GetResourceInfo(pid string) (ResourceInfo, error) // CPU% and MEM via ps
 	OpenInBrowser(port string) error
 }
 
@@ -280,6 +281,24 @@ func (s *SSScanner) ForceKillProcess(pid string) error {
 func (s *SSScanner) OpenInBrowser(port string) error {
 	url := "http://localhost:" + port
 	return exec.Command("xdg-open", url).Start()
+}
+
+// GetResourceInfo returns CPU% and RSS memory (in MB) for the given pid via ps.
+func (s *SSScanner) GetResourceInfo(pid string) (ResourceInfo, error) {
+	if pid == "-" {
+		return ResourceInfo{}, nil
+	}
+	out, err := exec.Command("ps", "-p", pid, "-o", "%cpu,rss", "--no-headers").Output()
+	if err != nil {
+		return ResourceInfo{}, err
+	}
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) < 2 {
+		return ResourceInfo{}, fmt.Errorf("unexpected ps output")
+	}
+	cpu, _ := strconv.ParseFloat(fields[0], 64)
+	rssKB, _ := strconv.ParseFloat(fields[1], 64)
+	return ResourceInfo{CPUPercent: cpu, MemMB: rssKB / 1024}, nil
 }
 
 // GetProcessDetails returns human-readable details for the given pid,
