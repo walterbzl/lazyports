@@ -21,6 +21,8 @@ func main() {
 
 	var scanner ports.Scanner
 	switch runtime.GOOS {
+	case "windows":
+		scanner = &ports.NetstatScanner{}
 	case "darwin":
 		scanner = &ports.LsofScanner{}
 	default:

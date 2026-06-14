@@ -1,6 +1,7 @@
 # Binaries
 /lazyports
 /main
+*.exe
 
 # Go build cache
 gocache/
