@@ -1,6 +1,6 @@
 # LazyPorts
 
-> **Visual port manager for Linux**
+> **Visual port manager for Linux, macOS, and Windows**
 
 [![CI](https://github.com/walterbzl/lazyports/actions/workflows/ci.yml/badge.svg)](https://github.com/walterbzl/lazyports/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -12,6 +12,16 @@
 ![LazyPorts Demo](assets/image.png)
 
 Built with Bubble Tea and Lipgloss.
+
+## Platform Support
+
+LazyPorts selects a port scanner automatically at runtime based on your OS:
+
+| Platform | Backend | Notes |
+| :--- | :--- | :--- |
+| **Linux** | `ss -tulnp` | Full support, including project auto-detection via `/proc`. |
+| **macOS** | `lsof` | Full support. |
+| **Windows** | `netstat -ano` + `tasklist` | Supported. CPU usage is not available from a single sample, so it shows `0%`. |
 
 ## Prerequisites
 
@@ -52,28 +62,53 @@ lazyports
 | Key | Action |
 | :--- | :--- |
 | `↑` / `↓` | Navigate list |
-| `/` | **Filter / Search** ports |
-| `Enter` | **View Details** (User, Path, Time) |
-| `k` | Kill selected process |
+| `/` | **Filter / Search** by port, PID, process, or label |
+| `Enter` | **View Details** (user, path, start time) |
+| `Tab` | Toggle the **side detail panel** (connection, process, network, resources) |
+| `k` | Kill selected process (graceful — SIGTERM / `taskkill`) |
+| `K` | **Force kill** (SIGKILL / `taskkill /F`), with confirmation |
+| `y` | **Copy** port number to clipboard |
+| `o` | **Open** `http://localhost:<port>` in the browser |
+| `l` | Assign a persistent **label** to the port |
 | `r` | Refresh list |
-| `s` | **Sort** (Cycle: Port → Process → PID) |
-| `q` | Quit |
+| `R` | Toggle **auto-refresh** |
+| `s` | **Sort** (cycle: Port → Process → PID) |
+| `q` / `Ctrl+C` | Quit |
 
 ## Features
 
 -   **Interactive Table**: Clean visualization of open ports (TCP/UDP).
+-   **Side Detail Panel**: Press `Tab` for connection, process, network, and resource (CPU/MEM) info.
 -   **Sortable Columns**: Press `s` to cycle sorting by Port, Process Name, or PID.
--   **Smart Filtering**: Type `/` to instantly filter by port, PID, or process name.
+-   **Smart Filtering**: Type `/` to instantly filter by port, PID, process name, or label.
 -   **Detailed Inspection**: Press `Enter` to see full command, user, and start time.
 
     ![Details View](assets/details.png)
 
--   **Process Management**: Terminate blocking processes instantly.
--   **Root-Aware detection**: Correctly identifies system processes (returning `(system)`) vs required privileges.
--   **Auto-Sorting**: Ports are automatically sorted numerically by default.
--   **Visual States**: Distinct indicators for `LISTEN` and `ESTAB` connections.
--   **Zero Config**: Works out of the box with automatic shell path configuration.
+-   **Process Management**: Graceful (`k`) and force (`K`) termination.
+-   **Persistent Labels**: Tag ports with `l`; saved to `~/.config/lazyports/labels.json`.
+-   **Quick Actions**: Copy a port (`y`) or open it in the browser (`o`).
+-   **Auto-Refresh**: Toggle live updates with `R`, or set an interval in the config.
+-   **Themes**: Catppuccin (default), Cherry Red, Tokyo Night, and Gruvbox.
+-   **Visual States**: Distinct indicators for `LISTEN` and `ESTAB`, plus 🔒 local / 🌐 exposed.
 
+## Configuration
+
+LazyPorts works with zero config. To customize, copy the sample to your config directory:
+
+```bash
+mkdir -p ~/.config/lazyports
+cp config.example.toml ~/.config/lazyports/config.toml
+```
+
+```toml
+[general]
+refresh_interval = 3        # seconds; 0 = manual refresh only
+theme = "cherry"            # catppuccin | cherry | tokyo-night | gruvbox
+
+[filters]
+default_sort = "port"       # port | process | pid
+```
 
 ## License
 
