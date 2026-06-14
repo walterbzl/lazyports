@@ -2,9 +2,10 @@
 
 > **Visual port manager for Linux**
 
+[![CI](https://github.com/walterbzl/lazyports/actions/workflows/ci.yml/badge.svg)](https://github.com/walterbzl/lazyports/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8.svg)
-[![GitHub stars](https://img.shields.io/github/stars/v9mirza/lazyports?style=flat-square)](https://github.com/v9mirza/lazyports/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/walterbzl/lazyports?style=flat-square)](https://github.com/walterbzl/lazyports/stargazers)
 <br>
 `lazyports` is a terminal UI tool to visualize and manage network ports. It provides an interactive table to inspect listening processes and kill them easily.
 
