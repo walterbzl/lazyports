@@ -83,10 +83,12 @@ func TestFilterEntries(t *testing.T) {
 			wantPorts: []string{"5432"},
 		},
 		{
-			name:      "filter by PID sentinel matches sudo entry",
+			// "-" is a substring of both the PID sentinel "-" (port 8080) and
+			// the process name "redis-server" (port 6379). Substring search hits both.
+			name:      "hyphen substring matches PID sentinel and hyphenated process",
 			query:     "-",
-			wantN:     1,
-			wantPorts: []string{"8080"},
+			wantN:     2,
+			wantPorts: []string{"6379", "8080"},
 		},
 		{
 			name:      "no match returns empty",
@@ -95,10 +97,12 @@ func TestFilterEntries(t *testing.T) {
 			wantPorts: []string{},
 		},
 		{
-			name:      "whitespace-only query returns all",
+			// A space is a substring of the process name "HTTP-Alt (requires sudo)",
+			// so substring search legitimately matches that entry.
+			name:      "space substring matches process with spaces",
 			query:     " ",
-			wantN:     0, // " " won't match any field literally (space doesn't appear in port/pid)
-			wantPorts: []string{},
+			wantN:     1,
+			wantPorts: []string{"8080"},
 		},
 	}
 
