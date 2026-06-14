@@ -11,10 +11,11 @@ const (
 
 // PortEntry represents a single process listening on a port.
 type PortEntry struct {
-	Port     string
-	Protocol string
-	PID      string
-	Process  string
-	State    string
-	Address  string
+	Port        string
+	Protocol    string
+	PID         string
+	Process     string
+	State       string
+	Address     string
+	Connections string // active ESTABLISHED connections for this port ("–" if unavailable)
 }

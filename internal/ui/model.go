@@ -38,7 +38,8 @@ func New(scanner ports.Scanner) model {
 		{Title: "Proto", Width: 6},
 		{Title: "State", Width: 12},
 		{Title: "PID", Width: 8},
-		{Title: "Address", Width: 20},
+		{Title: "Address", Width: 22},
+		{Title: "Conn", Width: 6},
 		{Title: "Process", Width: 20},
 	}
 
@@ -232,7 +233,7 @@ func (m *model) sortEntries() {
 }
 
 func (m *model) updateTableColumns() {
-	usedWidth := (8 + 6 + 12 + 8 + 20) + 14
+	usedWidth := (8 + 6 + 12 + 8 + 22 + 6) + 14
 	remainingWidth := m.width - usedWidth
 
 	columns := []table.Column{
@@ -240,7 +241,8 @@ func (m *model) updateTableColumns() {
 		{Title: "Proto", Width: 6},
 		{Title: "State", Width: 12},
 		{Title: "PID", Width: 8},
-		{Title: "Address", Width: 20},
+		{Title: "Address", Width: 22},
+		{Title: "Conn", Width: 6},
 		{Title: "Process", Width: remainingWidth},
 	}
 
@@ -281,12 +283,28 @@ func (m *model) updateTable() {
 		} else if strings.Contains(e.State, "ESTAB") {
 			stateIcon = "↔"
 		}
+
+		// #2: local vs exposed indicator
+		addrDisplay := e.Address
+		if strings.HasPrefix(e.Address, "127.") || e.Address == "::1" {
+			addrDisplay = "🔒 " + e.Address
+		} else {
+			addrDisplay = "🌐 " + e.Address
+		}
+
+		// #3: active connections count
+		conn := e.Connections
+		if conn == "" {
+			conn = "–"
+		}
+
 		rows = append(rows, table.Row{
 			e.Port,
 			e.Protocol,
 			stateIcon + " " + e.State,
 			e.PID,
-			e.Address,
+			addrDisplay,
+			conn,
 			e.Process,
 		})
 	}
