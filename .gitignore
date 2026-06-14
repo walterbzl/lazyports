@@ -2,5 +2,10 @@
 /lazyports
 /main
 
+# Go build cache
+gocache/
+tmp/
+testbuild/
+
 # OS Specific
 .DS_Store
