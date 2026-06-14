@@ -6,13 +6,16 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // Scanner is the interface for port discovery and process management.
 type Scanner interface {
 	GetPorts() ([]PortEntry, error)
-	KillProcess(pid string) error
+	KillProcess(pid string) error      // SIGTERM — graceful shutdown
+	ForceKillProcess(pid string) error // SIGKILL — immediate termination
 	GetProcessDetails(pid string) (string, error)
+	OpenInBrowser(port string) error
 }
 
 // SSScanner is the concrete Scanner implementation that uses the ss utility.
@@ -227,25 +230,56 @@ func (s *SSScanner) GetPorts() ([]PortEntry, error) {
 	return entries, nil
 }
 
-// KillProcess terminates the process identified by pid.
-// When pid is "-", it means the process details are unavailable (system process or requires sudo);
-// KillProcess returns a descriptive error so the UI can display it without any OS calls.
-func (s *SSScanner) KillProcess(pid string) error {
+func pidGuard(pid string) (int, error) {
 	if pid == "-" {
 		if os.Geteuid() == 0 {
-			return fmt.Errorf("Cannot kill system process")
+			return 0, fmt.Errorf("cannot kill system process")
 		}
-		return fmt.Errorf("Run as sudo to kill this process")
+		return 0, fmt.Errorf("run as sudo to kill this process")
 	}
-	pidInt, err := strconv.Atoi(pid)
+	n, err := strconv.Atoi(pid)
+	if err != nil {
+		return 0, fmt.Errorf("invalid PID: %s", pid)
+	}
+	return n, nil
+}
+
+// KillProcess sends SIGTERM to the process (graceful shutdown).
+func (s *SSScanner) KillProcess(pid string) error {
+	n, err := pidGuard(pid)
 	if err != nil {
 		return err
 	}
-	proc, err := os.FindProcess(pidInt)
+	proc, err := os.FindProcess(n)
 	if err != nil {
 		return err
 	}
-	return proc.Kill()
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("SIGTERM failed for %s (try sudo): %v", pid, err)
+	}
+	return nil
+}
+
+// ForceKillProcess sends SIGKILL to the process (immediate termination).
+func (s *SSScanner) ForceKillProcess(pid string) error {
+	n, err := pidGuard(pid)
+	if err != nil {
+		return err
+	}
+	proc, err := os.FindProcess(n)
+	if err != nil {
+		return err
+	}
+	if err := proc.Kill(); err != nil {
+		return fmt.Errorf("SIGKILL failed for %s (try sudo): %v", pid, err)
+	}
+	return nil
+}
+
+// OpenInBrowser opens http://localhost:PORT in the default browser via xdg-open.
+func (s *SSScanner) OpenInBrowser(port string) error {
+	url := "http://localhost:" + port
+	return exec.Command("xdg-open", url).Start()
 }
 
 // GetProcessDetails returns human-readable details for the given pid,

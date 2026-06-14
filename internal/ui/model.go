@@ -5,33 +5,44 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/v9mirza/lazyports/internal/labels"
 	"github.com/v9mirza/lazyports/internal/ports"
 )
 
+const autoRefreshInterval = 3 * time.Second
+
+type tickMsg time.Time
+
 type model struct {
-	scanner         ports.Scanner
-	table           table.Model
-	textInput       textinput.Model
-	entries         []ports.PortEntry
-	filteredEntries []ports.PortEntry
-	err             error
-	status          string
-	width           int
-	height          int
-	isFiltering     bool
-	showDetails     bool
-	detailsContent  string
-	sortMode        ports.SortMode
+	scanner          ports.Scanner
+	table            table.Model
+	textInput        textinput.Model
+	labelInput       textinput.Model
+	labelStore       *labels.Store
+	entries          []ports.PortEntry
+	filteredEntries  []ports.PortEntry
+	err              error
+	status           string
+	width            int
+	height           int
+	isFiltering      bool
+	isLabeling       bool
+	showDetails      bool
+	detailsContent   string
+	sortMode         ports.SortMode
+	pendingForceKill string // PID awaiting SIGKILL confirmation ("" = none)
+	autoRefresh      bool
 }
 
-// New builds the initial model with table and textinput configured,
-// injecting the Scanner the UI will use for all OS interactions.
+// New builds the initial model, injecting the Scanner and loading persisted labels.
 func New(scanner ports.Scanner) model {
 	columns := []table.Column{
 		{Title: "Port", Width: 8},
@@ -40,6 +51,7 @@ func New(scanner ports.Scanner) model {
 		{Title: "PID", Width: 8},
 		{Title: "Address", Width: 22},
 		{Title: "Conn", Width: 6},
+		{Title: "Label", Width: 8},
 		{Title: "Process", Width: 20},
 	}
 
@@ -48,7 +60,6 @@ func New(scanner ports.Scanner) model {
 		table.WithFocused(true),
 		table.WithHeight(10),
 	)
-
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -61,16 +72,27 @@ func New(scanner ports.Scanner) model {
 		Bold(false)
 	t.SetStyles(s)
 
-	ti := textinput.New()
-	ti.Placeholder = "Search ports, processes, pids..."
-	ti.CharLimit = 156
-	ti.Width = 40
+	search := textinput.New()
+	search.Placeholder = "Search ports, processes, pids..."
+	search.CharLimit = 156
+	search.Width = 40
 
-	return model{scanner: scanner, table: t, textInput: ti}
+	li := textinput.New()
+	li.Placeholder = "Label (empty to clear)..."
+	li.CharLimit = 32
+	li.Width = 30
+
+	ls, _ := labels.Load()
+
+	return model{
+		scanner:    scanner,
+		table:      t,
+		textInput:  search,
+		labelInput: li,
+		labelStore: ls,
+	}
 }
 
-// loadPortsCmd returns a tea.Cmd closure bound to the given Scanner.
-// The UI never references a concrete scanner or package-global.
 func loadPortsCmd(s ports.Scanner) tea.Cmd {
 	return func() tea.Msg {
 		entries, err := s.GetPorts()
@@ -81,18 +103,73 @@ func loadPortsCmd(s ports.Scanner) tea.Cmd {
 	}
 }
 
+func tickCmd() tea.Cmd {
+	return tea.Tick(autoRefreshInterval, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
 func (m model) Init() tea.Cmd {
-	return tea.Batch(loadPortsCmd(m.scanner), textinput.Blink)
+	return tea.Batch(loadPortsCmd(m.scanner), textinput.Blink, tickCmd())
+}
+
+func (m model) selectedEntry() (ports.PortEntry, bool) {
+	idx := m.table.Cursor()
+	if idx >= 0 && idx < len(m.filteredEntries) {
+		return m.filteredEntries[idx], true
+	}
+	return ports.PortEntry{}, false
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	// ── Force kill confirmation overlay ──────────────────────────────────────
+	if m.pendingForceKill != "" {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "K", "enter":
+				pid := m.pendingForceKill
+				m.pendingForceKill = ""
+				if err := m.scanner.ForceKillProcess(pid); err != nil {
+					m.status = err.Error()
+					return m, nil
+				}
+				m.status = fmt.Sprintf("Force-killed PID %s", pid)
+				return m, loadPortsCmd(m.scanner)
+			case "esc", "q":
+				m.pendingForceKill = ""
+				m.status = "Force kill cancelled"
+				return m, nil
+			}
+		}
+		return m, nil
+	}
+
+	// ── Label input overlay ──────────────────────────────────────────────────
+	if m.isLabeling {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "enter":
+				if e, ok := m.selectedEntry(); ok {
+					_ = m.labelStore.Set(e.Port, strings.TrimSpace(m.labelInput.Value()))
+				}
+				m.isLabeling = false
+				m.updateTable()
+				return m, nil
+			case "esc":
+				m.isLabeling = false
+				return m, nil
+			}
+		}
+		m.labelInput, cmd = m.labelInput.Update(msg)
+		return m, cmd
+	}
+
+	// ── Search filter ────────────────────────────────────────────────────────
 	if m.isFiltering {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "enter", "esc":
+		if key, ok := msg.(tea.KeyMsg); ok {
+			if key.String() == "enter" || key.String() == "esc" {
 				m.isFiltering = false
 				m.table.Focus()
 				return m, nil
@@ -103,10 +180,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// ── Details modal ────────────────────────────────────────────────────────
 	if m.showDetails {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			if msg.String() == "esc" || msg.String() == "q" || msg.String() == "enter" {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			if key.String() == "esc" || key.String() == "q" || key.String() == "enter" {
 				m.showDetails = false
 				return m, nil
 			}
@@ -114,19 +191,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// ── Normal mode ──────────────────────────────────────────────────────────
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+
 		case "/":
 			m.isFiltering = true
 			m.textInput.Focus()
 			m.textInput.SetValue("")
 			return m, textinput.Blink
+
 		case "r":
 			m.status = "Refreshing..."
 			return m, loadPortsCmd(m.scanner)
+
+		case "R":
+			m.autoRefresh = !m.autoRefresh
+			if m.autoRefresh {
+				m.status = "Auto-refresh ON (3s)"
+			} else {
+				m.status = "Auto-refresh OFF"
+			}
+
 		case "s":
 			m.sortMode++
 			if m.sortMode > ports.SortByPID {
@@ -135,40 +224,63 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sortEntries()
 			m.updateTableColumns()
 			m.updateTable()
+
 		case "enter":
-			if len(m.filteredEntries) > 0 {
-				selectedIdx := m.table.Cursor()
-				if selectedIdx >= 0 && selectedIdx < len(m.filteredEntries) {
-					target := m.filteredEntries[selectedIdx]
-					details, err := m.scanner.GetProcessDetails(target.PID)
-					if err != nil {
-						m.detailsContent = fmt.Sprintf("Error: %v", err)
-					} else {
-						if target.PID == "-" {
-							m.detailsContent = details
-						} else {
-							m.detailsContent = fmt.Sprintf(
-								"Port:      %s/%s\nPID:       %s\nAddress:   %s\nState:     %s\nProcess:   %s\n\n%s",
-								target.Port, target.Protocol, target.PID, target.Address, target.State, target.Process, details,
-							)
-						}
-					}
-					m.showDetails = true
+			if e, ok := m.selectedEntry(); ok {
+				details, err := m.scanner.GetProcessDetails(e.PID)
+				if err != nil {
+					m.detailsContent = fmt.Sprintf("Error: %v", err)
+				} else if e.PID == "-" {
+					m.detailsContent = details
+				} else {
+					m.detailsContent = fmt.Sprintf(
+						"Port:      %s/%s\nPID:       %s\nAddress:   %s\nState:     %s\nProcess:   %s\n\n%s",
+						e.Port, e.Protocol, e.PID, e.Address, e.State, e.Process, details,
+					)
+				}
+				m.showDetails = true
+			}
+
+		case "k":
+			if e, ok := m.selectedEntry(); ok {
+				if err := m.scanner.KillProcess(e.PID); err != nil {
+					m.status = err.Error()
+					return m, nil
+				}
+				m.status = fmt.Sprintf("Sent SIGTERM to %s (%s)", e.Process, e.PID)
+				return m, loadPortsCmd(m.scanner)
+			}
+
+		case "K":
+			if e, ok := m.selectedEntry(); ok {
+				m.pendingForceKill = e.PID
+				m.status = fmt.Sprintf("Force kill PID %s? Press K/Enter to confirm, Esc to cancel", e.PID)
+			}
+
+		case "y":
+			if e, ok := m.selectedEntry(); ok {
+				if err := clipboard.WriteAll(e.Port); err != nil {
+					m.status = "Clipboard unavailable: " + err.Error()
+				} else {
+					m.status = fmt.Sprintf("Port %s copied to clipboard", e.Port)
 				}
 			}
-		case "k":
-			if len(m.filteredEntries) > 0 {
-				selectedIdx := m.table.Cursor()
-				if selectedIdx >= 0 && selectedIdx < len(m.filteredEntries) {
-					target := m.filteredEntries[selectedIdx]
-					// scanner.KillProcess owns all privilege policy — no os.Geteuid() here.
-					if err := m.scanner.KillProcess(target.PID); err != nil {
-						m.status = err.Error()
-						return m, nil
-					}
-					m.status = fmt.Sprintf("Killed %s (%s)", target.Process, target.PID)
-					return m, loadPortsCmd(m.scanner)
+
+		case "o":
+			if e, ok := m.selectedEntry(); ok {
+				if err := m.scanner.OpenInBrowser(e.Port); err != nil {
+					m.status = "Cannot open browser: " + err.Error()
+				} else {
+					m.status = fmt.Sprintf("Opening http://localhost:%s...", e.Port)
 				}
+			}
+
+		case "l":
+			if e, ok := m.selectedEntry(); ok {
+				m.isLabeling = true
+				m.labelInput.SetValue(m.labelStore.Get(e.Port))
+				m.labelInput.Focus()
+				return m, textinput.Blink
 			}
 		}
 
@@ -194,6 +306,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Refreshed"
 		}
 
+	case tickMsg:
+		if m.autoRefresh {
+			return m, tea.Batch(loadPortsCmd(m.scanner), tickCmd())
+		}
+		return m, tickCmd()
+
 	case error:
 		m.err = msg
 	}
@@ -214,17 +332,17 @@ func (m *model) sortEntries() {
 			if m.entries[j].PID == "-" {
 				return true
 			}
-			pid1, _ := strconv.Atoi(m.entries[i].PID)
-			pid2, _ := strconv.Atoi(m.entries[j].PID)
-			return pid1 < pid2
+			a, _ := strconv.Atoi(m.entries[i].PID)
+			b, _ := strconv.Atoi(m.entries[j].PID)
+			return a < b
 		default:
-			p1, err1 := strconv.Atoi(m.entries[i].Port)
-			p2, err2 := strconv.Atoi(m.entries[j].Port)
-			if err1 == nil && err2 == nil {
-				if p1 == p2 {
+			a, ea := strconv.Atoi(m.entries[i].Port)
+			b, eb := strconv.Atoi(m.entries[j].Port)
+			if ea == nil && eb == nil {
+				if a == b {
 					return m.entries[i].Protocol < m.entries[j].Protocol
 				}
-				return p1 < p2
+				return a < b
 			}
 			return m.entries[i].Port < m.entries[j].Port
 		}
@@ -233,8 +351,12 @@ func (m *model) sortEntries() {
 }
 
 func (m *model) updateTableColumns() {
-	usedWidth := (8 + 6 + 12 + 8 + 22 + 6) + 14
-	remainingWidth := m.width - usedWidth
+	// Fixed widths: Port+Proto+State+PID+Address+Conn+Label + padding
+	fixed := 8 + 6 + 12 + 8 + 22 + 6 + 8 + 14
+	procWidth := m.width - fixed
+	if procWidth < 8 {
+		procWidth = 8
+	}
 
 	columns := []table.Column{
 		{Title: "Port", Width: 8},
@@ -243,7 +365,8 @@ func (m *model) updateTableColumns() {
 		{Title: "PID", Width: 8},
 		{Title: "Address", Width: 22},
 		{Title: "Conn", Width: 6},
-		{Title: "Process", Width: remainingWidth},
+		{Title: "Label", Width: 8},
+		{Title: "Process", Width: procWidth},
 	}
 
 	arrow := " ▼"
@@ -253,7 +376,7 @@ func (m *model) updateTableColumns() {
 	case ports.SortByPID:
 		columns[3].Title += arrow
 	case ports.SortByProcess:
-		columns[5].Title += arrow
+		columns[7].Title += arrow
 	}
 
 	m.table.SetColumns(columns)
@@ -261,13 +384,15 @@ func (m *model) updateTableColumns() {
 
 func (m *model) filterEntries() {
 	query := strings.ToLower(m.textInput.Value())
-	m.filteredEntries = []ports.PortEntry{}
+	m.filteredEntries = m.filteredEntries[:0]
 
 	for _, e := range m.entries {
+		lbl := strings.ToLower(m.labelStore.Get(e.Port))
 		if query == "" ||
 			strings.Contains(strings.ToLower(e.Process), query) ||
 			strings.Contains(e.Port, query) ||
-			strings.Contains(e.PID, query) {
+			strings.Contains(e.PID, query) ||
+			strings.Contains(lbl, query) {
 			m.filteredEntries = append(m.filteredEntries, e)
 		}
 	}
@@ -275,7 +400,7 @@ func (m *model) filterEntries() {
 }
 
 func (m *model) updateTable() {
-	rows := []table.Row{}
+	rows := make([]table.Row, 0, len(m.filteredEntries))
 	for _, e := range m.filteredEntries {
 		stateIcon := "○"
 		if strings.Contains(e.State, "LISTEN") {
@@ -284,19 +409,17 @@ func (m *model) updateTable() {
 			stateIcon = "↔"
 		}
 
-		// #2: local vs exposed indicator
-		addrDisplay := e.Address
+		addrDisplay := "🌐 " + e.Address
 		if strings.HasPrefix(e.Address, "127.") || e.Address == "::1" {
 			addrDisplay = "🔒 " + e.Address
-		} else {
-			addrDisplay = "🌐 " + e.Address
 		}
 
-		// #3: active connections count
 		conn := e.Connections
 		if conn == "" {
 			conn = "–"
 		}
+
+		lbl := m.labelStore.Get(e.Port)
 
 		rows = append(rows, table.Row{
 			e.Port,
@@ -305,6 +428,7 @@ func (m *model) updateTable() {
 			e.PID,
 			addrDisplay,
 			conn,
+			lbl,
 			e.Process,
 		})
 	}
@@ -316,23 +440,54 @@ func (m model) View() string {
 		return fmt.Sprintf("Error: %v\nPress 'q' to quit", m.err)
 	}
 
-	if m.showDetails {
-		content := detailsTitleStyle.Render("Connection Details") + "\n" + m.detailsContent
-		content += "\n\n" + helpStyle.Render("Press Esc/Enter to close")
-		box := detailsStyle.Render(content)
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
-	}
-
 	logo := logoStyle.Render("⚡ LazyPorts")
 	availableHeight := m.height - 7
 	tableView := makeBaseStyle(m.width, availableHeight).Render(m.table.View())
 
-	controls := "↑/↓: Navigate • /: Filter • Enter: Details • k: Kill • r: Refresh • s: Sort • q: Quit"
-	if m.isFiltering {
-		controls = "Type to search • Esc/Enter: Done"
-		return fmt.Sprintf("%s\n%s\n%s\n%s", logo, tableView, inputStyle.Render(m.textInput.View()), helpStyle.Render(controls))
+	// ── Force kill confirmation ──────────────────────────────────────────────
+	if m.pendingForceKill != "" {
+		prompt := detailsStyle.Render(
+			detailsTitleStyle.Render("⚠ Force Kill") + "\n" +
+				fmt.Sprintf("Send SIGKILL to PID %s?\n\n", m.pendingForceKill) +
+				helpStyle.Render("K / Enter: confirm  •  Esc: cancel"),
+		)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, prompt)
 	}
 
+	// ── Details modal ────────────────────────────────────────────────────────
+	if m.showDetails {
+		content := detailsTitleStyle.Render("Connection Details") + "\n" + m.detailsContent
+		content += "\n\n" + helpStyle.Render("Press Esc/Enter to close")
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, detailsStyle.Render(content))
+	}
+
+	// ── Label input ──────────────────────────────────────────────────────────
+	if m.isLabeling {
+		if e, ok := m.selectedEntry(); ok {
+			prompt := detailsStyle.Render(
+				detailsTitleStyle.Render(fmt.Sprintf("Label port %s", e.Port)) + "\n" +
+					inputStyle.Render(m.labelInput.View()) + "\n" +
+					helpStyle.Render("Enter: save  •  Esc: cancel"),
+			)
+			return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, prompt)
+		}
+	}
+
+	// ── Search filter ────────────────────────────────────────────────────────
+	if m.isFiltering {
+		return fmt.Sprintf("%s\n%s\n%s\n%s",
+			logo, tableView,
+			inputStyle.Render(m.textInput.View()),
+			helpStyle.Render("Type to search  •  Esc/Enter: done"),
+		)
+	}
+
+	// ── Normal view ──────────────────────────────────────────────────────────
+	refresh := ""
+	if m.autoRefresh {
+		refresh = " • auto:3s"
+	}
+	controls := fmt.Sprintf("↑/↓ Nav • / Filter • Enter Details • k Kill • K Force • y Copy • o Open • l Label • R Auto%s • s Sort • q Quit", refresh)
 	if m.status != "" {
 		controls = statusStyle.Render(m.status) + " • " + controls
 	}
