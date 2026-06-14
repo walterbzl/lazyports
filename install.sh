@@ -2,7 +2,7 @@
 
 set -e
 
-REPO="v9mirza/lazyports"
+REPO="walterbzl/lazyports"
 BINARY="lazyports"
 
 # ANSI Colors

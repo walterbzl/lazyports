@@ -1,4 +1,4 @@
-module github.com/v9mirza/lazyports
+module github.com/walterbzl/lazyports
 
 go 1.24.0
 

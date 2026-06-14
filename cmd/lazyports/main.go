@@ -8,9 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/v9mirza/lazyports/internal/config"
-	"github.com/v9mirza/lazyports/internal/ports"
-	"github.com/v9mirza/lazyports/internal/ui"
+	"github.com/walterbzl/lazyports/internal/config"
+	"github.com/walterbzl/lazyports/internal/ports"
+	"github.com/walterbzl/lazyports/internal/ui"
 )
 
 func main() {

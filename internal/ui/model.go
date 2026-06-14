@@ -13,9 +13,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/v9mirza/lazyports/internal/config"
-	"github.com/v9mirza/lazyports/internal/labels"
-	"github.com/v9mirza/lazyports/internal/ports"
+	"github.com/walterbzl/lazyports/internal/config"
+	"github.com/walterbzl/lazyports/internal/labels"
+	"github.com/walterbzl/lazyports/internal/ports"
 )
 
 const autoRefreshInterval = 3 * time.Second

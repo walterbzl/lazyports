@@ -29,13 +29,33 @@ LazyPorts selects a port scanner automatically at runtime based on your OS:
 
 ## Installation
 
-Install with a single command:
+### Linux / macOS — one-liner
 
 ```bash
-curl -sL https://raw.githubusercontent.com/v9mirza/lazyports/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/walterbzl/lazyports/main/install.sh | bash
 ```
 
-*Note: The script may request `sudo` permission to install the binary to `/usr/local/bin` for system-wide access.*
+*Note: the script may request `sudo` to install the binary to `/usr/local/bin` for system-wide access.*
+
+### Any platform — `go install`
+
+```bash
+go install github.com/walterbzl/lazyports/cmd/lazyports@latest
+```
+
+The binary lands in `$(go env GOPATH)/bin` (add it to your `PATH` if needed).
+
+### From source
+
+```bash
+git clone https://github.com/walterbzl/lazyports.git
+cd lazyports
+go build ./cmd/lazyports        # produces ./lazyports (or .\lazyports.exe on Windows)
+# or run directly:
+go run ./cmd/lazyports
+```
+
+On **Windows**, run `.\lazyports.exe` from PowerShell or Windows Terminal. If SmartScreen/Defender blocks the freshly built binary, use `go run ./cmd/lazyports` instead.
 
 ## Uninstallation
 

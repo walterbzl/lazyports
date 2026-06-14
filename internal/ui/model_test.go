@@ -3,8 +3,8 @@ package ui
 import (
 	"testing"
 
-	"github.com/v9mirza/lazyports/internal/config"
-	"github.com/v9mirza/lazyports/internal/ports"
+	"github.com/walterbzl/lazyports/internal/config"
+	"github.com/walterbzl/lazyports/internal/ports"
 )
 
 // mockScanner satisfies ports.Scanner without any OS calls.
