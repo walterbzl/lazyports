@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -18,7 +19,14 @@ func main() {
 		log.Printf("warning: config parse error (%v), using defaults", err)
 	}
 
-	scanner := &ports.SSScanner{}
+	var scanner ports.Scanner
+	switch runtime.GOOS {
+	case "darwin":
+		scanner = &ports.LsofScanner{}
+	default:
+		scanner = &ports.SSScanner{}
+	}
+
 	m := ui.New(scanner, cfg)
 
 	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {

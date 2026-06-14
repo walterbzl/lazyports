@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // Scanner is the interface for port discovery and process management.
@@ -246,78 +245,21 @@ func pidGuard(pid string) (int, error) {
 }
 
 // KillProcess sends SIGTERM to the process (graceful shutdown).
-func (s *SSScanner) KillProcess(pid string) error {
-	n, err := pidGuard(pid)
-	if err != nil {
-		return err
-	}
-	proc, err := os.FindProcess(n)
-	if err != nil {
-		return err
-	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		return fmt.Errorf("SIGTERM failed for %s (try sudo): %v", pid, err)
-	}
-	return nil
-}
+func (s *SSScanner) KillProcess(pid string) error { return sharedKill(pid) }
 
 // ForceKillProcess sends SIGKILL to the process (immediate termination).
-func (s *SSScanner) ForceKillProcess(pid string) error {
-	n, err := pidGuard(pid)
-	if err != nil {
-		return err
-	}
-	proc, err := os.FindProcess(n)
-	if err != nil {
-		return err
-	}
-	if err := proc.Kill(); err != nil {
-		return fmt.Errorf("SIGKILL failed for %s (try sudo): %v", pid, err)
-	}
-	return nil
-}
+func (s *SSScanner) ForceKillProcess(pid string) error { return sharedForceKill(pid) }
 
-// OpenInBrowser opens http://localhost:PORT in the default browser via xdg-open.
-func (s *SSScanner) OpenInBrowser(port string) error {
-	url := "http://localhost:" + port
-	return exec.Command("xdg-open", url).Start()
-}
+// OpenInBrowser opens http://localhost:PORT in the default browser.
+func (s *SSScanner) OpenInBrowser(port string) error { return sharedOpenInBrowser(port) }
 
 // GetResourceInfo returns CPU% and RSS memory (in MB) for the given pid via ps.
 func (s *SSScanner) GetResourceInfo(pid string) (ResourceInfo, error) {
-	if pid == "-" {
-		return ResourceInfo{}, nil
-	}
-	out, err := exec.Command("ps", "-p", pid, "-o", "%cpu,rss", "--no-headers").Output()
-	if err != nil {
-		return ResourceInfo{}, err
-	}
-	fields := strings.Fields(strings.TrimSpace(string(out)))
-	if len(fields) < 2 {
-		return ResourceInfo{}, fmt.Errorf("unexpected ps output")
-	}
-	cpu, _ := strconv.ParseFloat(fields[0], 64)
-	rssKB, _ := strconv.ParseFloat(fields[1], 64)
-	return ResourceInfo{CPUPercent: cpu, MemMB: rssKB / 1024}, nil
+	return sharedGetResourceInfo(pid)
 }
 
 // GetProcessDetails returns human-readable details for the given pid,
 // enriched with project/framework detection from the process CWD.
 func (s *SSScanner) GetProcessDetails(pid string) (string, error) {
-	if pid == "-" {
-		if os.Geteuid() == 0 {
-			return "System process (no detailed information available).", nil
-		}
-		return "Process details require sudo privileges.", nil
-	}
-	cmd := exec.Command("ps", "-p", pid, "-o", "user,lstart,cmd", "--no-headers")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get details: %v", err)
-	}
-	result := strings.TrimSpace(string(output))
-	if proj := detectProject(pid); proj != "" {
-		result += "\n\n── PROJECT ──\n" + proj
-	}
-	return result, nil
+	return sharedGetProcessDetails(pid)
 }
