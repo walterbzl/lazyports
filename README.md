@@ -40,6 +40,10 @@ curl -sL https://raw.githubusercontent.com/walterbzl/lazyports/main/install.sh |
 ### Any platform — `go install`
 
 ```bash
+# Latest commit on main (no release tag required):
+go install github.com/walterbzl/lazyports/cmd/lazyports@main
+
+# Once a version is tagged (e.g. v0.2.0), you can pin it:
 go install github.com/walterbzl/lazyports/cmd/lazyports@latest
 ```
 
